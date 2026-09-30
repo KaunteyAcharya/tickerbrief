@@ -1,0 +1,45 @@
+# --- Secrets & local config ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*credentials*.json
+!n8n/workflows/*.json
+
+# --- n8n local data (contains encrypted credentials, execution logs) ---
+.n8n/
+n8n_data/
+*.sqlite
+*.sqlite-journal
+database.sqlite*
+
+# --- Generated reports (your runs stay local; site/samples/ holds the committed demo) ---
+site/reports/*
+!site/reports/.gitkeep
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+.coverage
+htmlcov/
+
+# --- Node ---
+node_modules/
+
+# --- OS / editors ---
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+
+# --- Media & scratch ---
+*.log
+tmp/
+scratch/

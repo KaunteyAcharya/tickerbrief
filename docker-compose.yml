@@ -1,0 +1,106 @@
+# Automated Research Report Generator — local stack
+# All ports are bound to 127.0.0.1 so nothing is reachable from your network.
+# Secrets and personal values come from .env (never committed). See .env.example.
+
+name: research-report-generator
+
+x-n8n-env: &n8n-env
+  N8N_HOST: localhost
+  N8N_PORT: "5678"
+  N8N_PROTOCOL: http
+  N8N_WEBHOOK_URL: http://localhost:${N8N_PORT:-5679}/
+  WEBHOOK_URL: http://localhost:${N8N_PORT:-5679}/        # older n8n versions
+  N8N_EDITOR_BASE_URL: http://localhost:${N8N_PORT:-5679}/
+  N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?Set N8N_ENCRYPTION_KEY in .env}
+  GENERIC_TIMEZONE: ${TIMEZONE:-UTC}
+  TZ: ${TIMEZONE:-UTC}
+  N8N_SECURE_COOKIE: "false"                 # plain http on localhost
+  N8N_DIAGNOSTICS_ENABLED: "false"           # no telemetry
+  N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+  N8N_PERSONALIZATION_ENABLED: "false"
+  N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"      # workflow reads the RRG_* values below via $env
+  N8N_RUNNERS_ENABLED: "true"
+  EXECUTIONS_DATA_PRUNE: "true"
+  EXECUTIONS_DATA_MAX_AGE: "168"             # keep 7 days of execution logs
+  # --- values the workflow uses (none of them are secrets) ---
+  RRG_ANALYTICS_URL: http://analytics:8000
+  RRG_OLLAMA_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+  RRG_LLM_MODEL: ${LLM_MODEL:-qwen3:4b}
+  RRG_LLM_NUM_CTX: ${LLM_NUM_CTX:-8192}
+  RRG_SEC_USER_AGENT: ${SEC_USER_AGENT:?Set SEC_USER_AGENT in .env (SEC requires a contact email)}
+  RRG_SITE_URL: http://localhost:${SITE_PORT:-8088}
+
+services:
+  analytics:
+    build: ./services/analytics
+    image: rrg-analytics:local
+    restart: unless-stopped
+    environment:
+      REPORTS_DIR: /data/reports
+      SITE_BASE_URL: http://localhost:${SITE_PORT:-8088}
+      DEFAULT_BENCHMARK: ${DEFAULT_BENCHMARK:-SPY}
+      HISTORY_PERIOD: ${HISTORY_PERIOD:-2y}
+      TZ: ${TIMEZONE:-UTC}
+    volumes:
+      - ./site/reports:/data/reports
+    ports:
+      - "127.0.0.1:${ANALYTICS_PORT:-8010}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: imports the workflow into n8n on first start only.
+  n8n-import:
+    image: ${N8N_IMAGE:-n8nio/n8n:2.41.4}
+    environment: *n8n-env
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n/workflows:/workflows:ro
+      - ./n8n/import.sh:/import.sh:ro
+    entrypoint: ["/bin/sh", "/import.sh"]
+    restart: "no"
+
+  n8n:
+    image: ${N8N_IMAGE:-n8nio/n8n:2.41.4}
+    restart: unless-stopped
+    environment: *n8n-env
+    ports:
+      - "127.0.0.1:${N8N_PORT:-5679}:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # lets n8n reach Ollama on the host (Linux too)
+    depends_on:
+      n8n-import:
+        condition: service_completed_successfully
+      analytics:
+        condition: service_healthy
+
+  site:
+    image: nginx:1.29-alpine
+    restart: unless-stopped
+    depends_on:
+      - n8n
+    volumes:
+      - ./site:/usr/share/nginx/html:ro
+      - ./config/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "127.0.0.1:${SITE_PORT:-8088}:80"
+
+  # Optional: run Ollama in Docker instead of on the host.
+  #   docker compose --profile ollama up -d
+  #   then set OLLAMA_BASE_URL=http://ollama:11434 in .env
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "127.0.0.1:11435:11434"
+
+volumes:
+  n8n_data:
+  ollama_data:

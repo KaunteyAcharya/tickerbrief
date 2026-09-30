@@ -1,0 +1,6 @@
+# Keep LF endings for anything that runs inside Linux containers (Windows checkouts included)
+* text=auto eol=lf
+*.sh text eol=lf
+*.pdf binary
+*.png binary
+*.mp4 binary

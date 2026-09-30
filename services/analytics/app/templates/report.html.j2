@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ m.name }} ({{ m.ticker }}) — Research Report</title>
+<style>
+  @page { size: A4; margin: 16mm 14mm 18mm 14mm;
+    @bottom-left { content: "{{ m.ticker }} · Automated research report · {{ generated_date }}"; font: 7pt "DejaVu Sans"; color: #898781; }
+    @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 7pt "DejaVu Sans"; color: #898781; } }
+  @page :first { margin-top: 0; }
+  * { box-sizing: border-box; }
+  body { font-family: "DejaVu Sans", sans-serif; font-size: 8.6pt; color: #0b0b0b; line-height: 1.45; margin: 0; }
+  h1 { font-size: 20pt; margin: 0; letter-spacing: -0.3px; }
+  h2 { font-size: 11pt; margin: 14px 0 6px; padding-bottom: 3px; border-bottom: 1px solid #e1e0d9; color: #13233f; }
+  h3 { font-size: 9pt; margin: 8px 0 4px; color: #52514e; text-transform: uppercase; letter-spacing: 0.6px; }
+  p { margin: 0 0 6px; }
+  .cover { background: #13233f; color: #fff; margin: 0 -14mm; padding: 16mm 14mm 10mm; }
+  .cover .sub { color: #b7c3d9; font-size: 9pt; margin-top: 4px; }
+  .cover .price { font-size: 16pt; font-weight: bold; margin-top: 10px; }
+  .chip { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 7.5pt; font-weight: bold; margin-right: 4px; }
+  .chip.Constructive { background: #d4f3e6; color: #0b5d3f; } .chip.Neutral { background: #ecebe6; color: #3d3c39; }
+  .chip.Cautious { background: #fde0dd; color: #8a1f1e; } .chip.muted { background: rgba(255,255,255,.14); color: #fff; }
+  .headline { font-size: 12pt; font-weight: bold; margin: 12px 0 4px; color: #13233f; }
+  .kpis { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid #e1e0d9; border-radius: 6px; margin: 8px 0; }
+  .kpi { width: 16.66%; padding: 6px 8px; border-right: 1px solid #e1e0d9; }
+  .kpi:last-child { border-right: 0; }
+  .kpi .l { font-size: 6.8pt; color: #898781; text-transform: uppercase; letter-spacing: .4px; }
+  .kpi .v { font-size: 10.5pt; font-weight: bold; }
+  .cols { display: flex; gap: 14px; } .cols > div { flex: 1; min-width: 0; }
+  ul { margin: 0 0 6px; padding-left: 14px; } li { margin-bottom: 2px; }
+  table { width: 100%; border-collapse: collapse; font-size: 7.6pt; margin: 4px 0 8px; }
+  th { text-align: right; color: #52514e; font-weight: bold; border-bottom: 1px solid #c3c2b7; padding: 3px 4px; }
+  td { text-align: right; padding: 3px 4px; border-bottom: 1px solid #efeee9; font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: left; }
+  tr.subject td { background: #eef4fc; font-weight: bold; }
+  img.chart { width: 100%; }
+  .caption { font-size: 7pt; color: #898781; margin: -2px 0 8px; }
+  .pos { color: #006300; } .neg { color: #b42323; }
+  .sig { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; }
+  .sig.bullish { background: #1baf7a; } .sig.bearish { background: #e34948; } .sig.neutral { background: #c3c2b7; }
+  .box { border: 1px solid #e1e0d9; border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; }
+  .news-item { margin-bottom: 4px; } .news-item .meta { color: #898781; font-size: 7pt; }
+  .src { font-size: 6.5pt; color: #898781; }
+  .disclaimer { font-size: 7pt; color: #52514e; border-top: 1px solid #e1e0d9; padding-top: 6px; margin-top: 12px; }
+  .page-break { page-break-before: always; }
+  a { color: #1c5cab; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div style="font-size:8pt; letter-spacing:1.2px; color:#b7c3d9; text-transform:uppercase;">Equity research · automated</div>
+  <h1>{{ m.name }}</h1>
+  <div class="sub">{{ m.ticker }}{% if m.exchange %} · {{ m.exchange }}{% endif %}{% if m.sector %} · {{ m.sector }}{% endif %}{% if m.industry %} / {{ m.industry }}{% endif %}</div>
+  <div class="price">{{ "%.2f"|format(pr.last) }} {{ m.currency or "" }}
+    <span style="font-size:10pt; font-weight:normal; color:{{ '#7ee2b8' if (pr.change_1d_pct or 0) >= 0 else '#ff9d9c' }};">{{ pct(pr.change_1d_pct, sign=True) }} 1d</span></div>
+  <div style="margin-top:8px;">
+    <span class="chip {{ n.summary.stance }}">{{ n.summary.stance }}</span>
+    <span class="chip muted">Confidence: {{ n.summary.confidence }}</span>
+    <span class="chip muted">Technical bias: {{ t.bias }}</span>
+    <span class="chip muted">News: {{ news.overall }}</span>
+  </div>
+  <div class="sub" style="margin-top:8px;">Prices as of {{ pr.last_date }} · generated {{ generated_at }} · model {{ meta.model or "rules only" }}</div>
+</div>
+
+<div class="headline">{{ n.summary.headline }}</div>
+<p>{{ n.summary.executive_summary }}</p>
+
+<div class="kpis">
+  <div class="kpi"><div class="l">Market cap</div><div class="v">{{ money(f.valuation.market_cap) }}</div></div>
+  <div class="kpi"><div class="l">Fwd P/E</div><div class="v">{{ x(f.valuation.pe_forward) }}</div></div>
+  <div class="kpi"><div class="l">EV/EBITDA</div><div class="v">{{ x(f.valuation.ev_to_ebitda) }}</div></div>
+  <div class="kpi"><div class="l">Op. margin</div><div class="v">{{ pct(f.profitability.operating_margin) }}</div></div>
+  <div class="kpi"><div class="l">Rev. growth</div><div class="v">{{ pct(f.growth.revenue_growth_yoy) }}</div></div>
+  <div class="kpi"><div class="l">1y return</div><div class="v {{ 'pos' if (pr.returns['1y'] or 0) >= 0 else 'neg' }}">{{ pct(pr.returns['1y'], sign=True) }}</div></div>
+</div>
+
+<div class="cols">
+  <div>
+    <h3>Bull case</h3>
+    <ul>{% for b in n.summary.bull_case %}<li>{{ b }}</li>{% endfor %}</ul>
+  </div>
+  <div>
+    <h3>Bear case</h3>
+    <ul>{% for b in n.summary.bear_case %}<li>{{ b }}</li>{% endfor %}</ul>
+  </div>
+</div>
+
+<div class="cols">
+  <div>
+    <h3>Scorecard (heuristic, 0–100)</h3>
+    <img class="chart" src="{{ charts.scorecard }}">
+  </div>
+  <div>
+    <h3>What to watch</h3>
+    <ul>{% for w in n.summary.watch_items %}<li>{{ w }}</li>{% endfor %}</ul>
+    <h3>Analyst consensus</h3>
+    <p>{{ (f.analyst.analysts or 0)|int }} analysts · consensus <b>{{ (f.analyst.recommendation or "n/a")|replace("_", " ") }}</b><br>
+    Mean target {{ num(f.analyst.target_mean) }} ({{ pct(f.analyst.upside_to_mean, sign=True) }} vs last) · range {{ num(f.analyst.target_low) }} – {{ num(f.analyst.target_high) }}</p>
+  </div>
+</div>
+
+<h2>Price & trend</h2>
+<img class="chart" src="{{ charts.price }}">
+<div class="caption">Daily close with 50/200-day simple moving averages and Bollinger bands (20, 2σ); volume below. Last ~12 months.</div>
+
+<div class="cols">
+  <div>
+    <h3>Trend & momentum</h3>
+    <p>{{ n.technical.trend_and_momentum }}</p>
+    <h3>Key levels</h3>
+    <p>{{ n.technical.key_levels }}</p>
+  </div>
+  <div>
+    <h3>Signals (score {{ "%.0f"|format(t.score) }}/100)</h3>
+    <table>
+      {% for s in t.signals %}<tr><td><span class="sig {{ s.signal }}"></span>{{ s.name }}</td><td style="text-align:left">{{ s.note }}</td></tr>{% endfor %}
+    </table>
+  </div>
+</div>
+<img class="chart" src="{{ charts.momentum }}">
+<div class="caption">RSI(14) with 30/70 bands; MACD(12, 26, 9) line, signal and histogram.</div>
+
+<div class="page-break"></div>
+<h2>Business & fundamentals</h2>
+<p>{{ n.fundamental.business_overview }}</p>
+<h3>Financial performance</h3>
+<p>{{ n.fundamental.financial_performance }}</p>
+
+<div class="cols">
+  <div>
+    {% if charts.financials %}<img class="chart" src="{{ charts.financials }}"><div class="caption">Annual revenue and net income.</div>{% endif %}
+  </div>
+  <div>
+    <table>
+      <tr><th>Fiscal year</th>{% for y in fin.years %}<th>{{ y }}</th>{% endfor %}</tr>
+      <tr><td>Revenue</td>{% for v in fin.revenue %}<td>{{ money(v, short=True) }}</td>{% endfor %}</tr>
+      <tr><td>Revenue growth</td>{% for v in fin.revenue_growth %}<td>{{ pct(v) }}</td>{% endfor %}</tr>
+      <tr><td>Gross margin</td>{% for v in fin.gross_margin %}<td>{{ pct(v) }}</td>{% endfor %}</tr>
+      <tr><td>Operating margin</td>{% for v in fin.operating_margin %}<td>{{ pct(v) }}</td>{% endfor %}</tr>
+      <tr><td>Net income</td>{% for v in fin.net_income %}<td>{{ money(v, short=True) }}</td>{% endfor %}</tr>
+      <tr><td>Free cash flow</td>{% for v in fin.fcf %}<td>{{ money(v, short=True) }}</td>{% endfor %}</tr>
+      <tr><td>Diluted EPS</td>{% for v in fin.diluted_eps %}<td>{{ num(v) }}</td>{% endfor %}</tr>
+    </table>
+  </div>
+</div>
+
+<div class="cols">
+  <div class="box">
+    <h3>Valuation</h3>
+    <table>
+      <tr><td>Trailing P/E</td><td>{{ x(f.valuation.pe_trailing) }}</td></tr>
+      <tr><td>Forward P/E</td><td>{{ x(f.valuation.pe_forward) }}</td></tr>
+      <tr><td>PEG</td><td>{{ x(f.valuation.peg, 2) }}</td></tr>
+      <tr><td>EV / EBITDA</td><td>{{ x(f.valuation.ev_to_ebitda) }}</td></tr>
+      <tr><td>Price / Sales</td><td>{{ x(f.valuation.price_to_sales) }}</td></tr>
+      <tr><td>Price / Book</td><td>{{ x(f.valuation.price_to_book) }}</td></tr>
+      <tr><td>FCF yield</td><td>{{ pct(f.valuation.fcf_yield) }}</td></tr>
+    </table>
+  </div>
+  <div class="box">
+    <h3>Profitability & growth</h3>
+    <table>
+      <tr><td>Gross margin</td><td>{{ pct(f.profitability.gross_margin) }}</td></tr>
+      <tr><td>Operating margin</td><td>{{ pct(f.profitability.operating_margin) }}</td></tr>
+      <tr><td>Net margin</td><td>{{ pct(f.profitability.net_margin) }}</td></tr>
+      <tr><td>ROE</td><td>{{ pct(f.profitability.roe) }}</td></tr>
+      <tr><td>Revenue growth (YoY)</td><td>{{ pct(f.growth.revenue_growth_yoy) }}</td></tr>
+      <tr><td>Earnings growth (YoY)</td><td>{{ pct(f.growth.earnings_growth_yoy) }}</td></tr>
+      <tr><td>Fwd EPS growth</td><td>{{ pct(f.growth.eps_forward_growth) }}</td></tr>
+    </table>
+  </div>
+  <div class="box">
+    <h3>Balance sheet</h3>
+    <table>
+      <tr><td>Cash</td><td>{{ money(f.health.total_cash) }}</td></tr>
+      <tr><td>Debt</td><td>{{ money(f.health.total_debt) }}</td></tr>
+      <tr><td>Net cash</td><td>{{ money(f.health.net_cash) }}</td></tr>
+      <tr><td>Debt / equity</td><td>{{ x(f.health.debt_to_equity, 2) }}</td></tr>
+      <tr><td>Current ratio</td><td>{{ x(f.health.current_ratio, 2) }}</td></tr>
+      <tr><td>Free cash flow</td><td>{{ money(f.health.free_cash_flow) }}</td></tr>
+      <tr><td>Dividend yield</td><td>{{ pct(f.dividend['yield']) }}</td></tr>
+    </table>
+  </div>
+</div>
+
+<h3>Valuation view</h3>
+<p>{{ n.fundamental.valuation }}</p>
+
+<h2>Peer comparison</h2>
+<p>{{ n.fundamental.peer_positioning }}</p>
+<table>
+  <tr><th>Ticker</th><th>Mkt cap</th><th>Fwd P/E</th><th>EV/EBITDA</th><th>P/S</th><th>Gross m.</th><th>Op. m.</th><th>ROE</th><th>Rev. growth</th><th>1y return</th></tr>
+  {% for r in peers.rows %}
+  <tr class="{{ 'subject' if r.is_subject }}"><td>{{ r.ticker }}</td><td>{{ money(r.market_cap, short=True) }}</td><td>{{ x(r.pe_forward) }}</td>
+    <td>{{ x(r.ev_to_ebitda) }}</td><td>{{ x(r.price_to_sales) }}</td><td>{{ pct(r.gross_margin) }}</td><td>{{ pct(r.operating_margin) }}</td>
+    <td>{{ pct(r.roe) }}</td><td>{{ pct(r.revenue_growth) }}</td><td>{{ pct(r.return_1y, sign=True) }}</td></tr>
+  {% endfor %}
+  <tr><td><i>Peer median</i></td><td></td><td>{{ x(peers.medians.pe_forward) }}</td><td>{{ x(peers.medians.ev_to_ebitda) }}</td><td>{{ x(peers.medians.price_to_sales) }}</td>
+    <td>{{ pct(peers.medians.gross_margin) }}</td><td>{{ pct(peers.medians.operating_margin) }}</td><td>{{ pct(peers.medians.roe) }}</td>
+    <td>{{ pct(peers.medians.revenue_growth) }}</td><td>{{ pct(peers.medians.return_1y, sign=True) }}</td></tr>
+</table>
+<div class="src">Peer set source: {{ peers.source }}.</div>
+<div class="cols">
+  <div>{% if charts.peers %}<img class="chart" src="{{ charts.peers }}"><div class="caption">Forward P/E vs peers (subject highlighted).</div>{% endif %}</div>
+  <div>{% if charts.relative %}<img class="chart" src="{{ charts.relative }}"><div class="caption">Weekly total price performance rebased to 100, vs peers and {{ peers.benchmark }}.</div>{% endif %}</div>
+</div>
+
+<div class="page-break"></div>
+<h2>News & sentiment</h2>
+<div class="cols">
+  <div>
+    <p>{{ n.technical.news_sentiment }}</p>
+    <p class="src">{{ news.count }} headlines scored with VADER + finance lexicon · {{ news.counts.positive }} positive · {{ news.counts.neutral }} neutral · {{ news.counts.negative }} negative</p>
+  </div>
+  <div>{% if charts.sentiment %}<img class="chart" src="{{ charts.sentiment }}">{% endif %}</div>
+</div>
+{% for it in news["items"][:12] %}
+<div class="news-item"><span class="sig {{ 'bullish' if it.label == 'positive' else 'bearish' if it.label == 'negative' else 'neutral' }}"></span>
+  {% if it.link %}<a href="{{ it.link }}">{{ it.title }}</a>{% else %}{{ it.title }}{% endif %}
+  <span class="meta">· {{ it.source or "" }} · {{ (it.published or "")[:10] }} · {{ "%+.2f"|format(it.score) }}</span></div>
+{% endfor %}
+
+<h2>Risks & catalysts</h2>
+<div class="cols">
+  <div><h3>Risks</h3><ul>{% for r in n.technical.risks %}<li>{{ r }}</li>{% endfor %}</ul></div>
+  <div><h3>Catalysts</h3><ul>{% for c in n.technical.catalysts %}<li>{{ c }}</li>{% endfor %}</ul></div>
+</div>
+
+<h2>Regulatory filings (SEC EDGAR)</h2>
+<p>{{ n.fundamental.filings_highlights }}</p>
+{% if fil.available %}
+<table>
+  <tr><th>Date</th><th style="text-align:left">Form</th><th style="text-align:left">Description</th></tr>
+  {% for x in fil.recent[:12] %}
+  <tr><td>{{ x.date }}</td><td style="text-align:left">{% if x.url %}<a href="{{ x.url }}">{{ x.form }}</a>{% else %}{{ x.form }}{% endif %}</td><td style="text-align:left">{{ x.description or "" }}</td></tr>
+  {% endfor %}
+</table>
+{% else %}<p class="src">{{ fil.note }}</p>{% endif %}
+
+<div class="disclaimer">
+  <b>Methodology.</b> Market data from Yahoo Finance via the open-source yfinance library; filings from SEC EDGAR; headlines from public RSS feeds.
+  Ratios, technical indicators, peer statistics and the scorecard are computed deterministically in Python. Narrative sections were drafted by a
+  local language model ({{ meta.model or "none" }}) from those computed figures{% if n.llm_coverage < 1 %}; {{ ((1 - n.llm_coverage) * 100)|round|int }}% of fields fell back to rule-based text{% endif %}.
+  <br><b>Not investment advice.</b> This report is generated automatically for educational purposes, may contain errors or stale data, and is not a
+  recommendation to buy or sell any security.
+</div>
+</body>
+</html>

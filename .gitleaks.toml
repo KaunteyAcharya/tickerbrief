@@ -1,0 +1,14 @@
+title = "research-report-generator gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Placeholders and vendored files"
+paths = [
+  '''site/assets/vendor/''',
+]
+regexes = [
+  '''replace-with-a-long-random-string''',
+  '''your-email@example\.com''',
+]

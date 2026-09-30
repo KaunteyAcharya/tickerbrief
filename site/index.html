@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Research Reports</title>
+  <meta name="description" content="Automated equity research reports generated locally with n8n, Python and a local LLM.">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/styles.css">
+  <script src="assets/common.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <a class="brand" href="index.html" aria-label="Research Reports home">
+        <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#2a78d6"/><path d="M7 22l6-7 5 4 7-9" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Research Reports
+      </a>
+      <span class="spacer"></span>
+      <a class="link" id="n8n-link" href="http://localhost:5679" target="_blank" rel="noopener noreferrer">Open n8n ↗</a>
+      <button class="icon-btn" data-theme-toggle title="Toggle light / dark" aria-label="Toggle light or dark theme">◐</button>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="wrap">
+      <h1>Automated equity research</h1>
+      <p>Enter a ticker. n8n pulls prices, fundamentals, SEC filings and news, Python computes ratios, peer comps and technicals, and a local LLM drafts the narrative. Everything runs on this machine.</p>
+    </div>
+  </section>
+
+  <main class="wrap">
+    <div class="card gen">
+      <form id="gen-form" autocomplete="off">
+        <div class="field" style="flex: 0 1 180px;">
+          <label for="ticker">Ticker</label>
+          <input class="input" id="ticker" name="ticker" placeholder="MSFT, INFY.NS" required maxlength="20" pattern="[A-Za-z0-9.\-\^=&amp;]{1,20}">
+        </div>
+        <div class="field" style="flex: 1 1 260px;">
+          <label for="peers">Peers <span class="muted" style="text-transform:none; letter-spacing:0; font-weight:400;">(optional, comma-separated)</span></label>
+          <input class="input" id="peers" name="peers" placeholder="Auto-detected if empty — e.g. AAPL, GOOGL, AMZN" maxlength="120">
+        </div>
+        <button class="btn" id="gen-btn" type="submit">Generate report</button>
+      </form>
+      <div class="gen-status" id="gen-status" role="status" aria-live="polite"></div>
+    </div>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Report library</h2>
+        <div class="toolbar">
+          <input class="input" id="search" type="search" placeholder="Search ticker, name, sector" style="height:36px; width:240px;">
+          <div class="seg" role="group" aria-label="Filter by stance" id="stance-filter">
+            <button type="button" aria-pressed="true" data-v="">All</button>
+            <button type="button" aria-pressed="false" data-v="Constructive">Constructive</button>
+            <button type="button" aria-pressed="false" data-v="Neutral">Neutral</button>
+            <button type="button" aria-pressed="false" data-v="Cautious">Cautious</button>
+          </div>
+        </div>
+      </div>
+      <div id="reports" class="reports" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <footer class="site">
+    <div class="wrap">Generated locally · data from Yahoo Finance (yfinance), SEC EDGAR and public RSS feeds · <b>not investment advice</b>.</div>
+  </footer>
+  <script src="assets/index.js"></script>
+</body>
+</html>

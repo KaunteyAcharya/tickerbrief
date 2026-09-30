@@ -1,0 +1,864 @@
+{
+  "id": "rrgResearchRpt01",
+  "name": "Automated Research Report Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 1 · Request\nPOST webhook used by the report site (http://localhost:8088) and by the companion **form workflow** (http://localhost:5679/form/research-report).\n\nBody: `{ \"ticker\": \"MSFT\", \"peers\": \"AAPL,GOOGL\" }`",
+        "height": 460,
+        "width": 620,
+        "color": 7
+      },
+      "id": "6db1f904-f0a4-56c5-81ae-79843f90d27a",
+      "name": "Note: inputs",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 2 · Parallel data pulls (all free, no API keys)\n- **yfinance** via the local analytics service: prices, fundamentals, statements, peers\n- **SEC EDGAR**: ticker → CIK → recent filings (needs a contact User-Agent, set in `.env`)\n- **RSS**: Google News + Yahoo Finance headlines\n\nEvery branch continues on error, so one failing source never blocks the report.",
+        "height": 880,
+        "width": 900,
+        "color": 5
+      },
+      "id": "81e6feeb-6ecb-5436-b40a-e1e9f3fb6848",
+      "name": "Note: sources",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        620,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 3 · Analysis (Python)\nRatios, peer comps, RSI/MACD/SMA/Bollinger, drawdown, volatility, headline sentiment (VADER) and a heuristic scorecard. Also writes compact briefs for the LLM so the model only sees computed numbers.",
+        "height": 460,
+        "width": 800,
+        "color": 6
+      },
+      "id": "0707c89e-9a3f-59da-a3f6-f6eb79d7a376",
+      "name": "Note: analysis",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 4 · LLM drafting (local Ollama)\nThree passes with JSON-schema structured output: fundamentals → technicals & news → lead-analyst summary. Model and URL come from `.env` (`LLM_MODEL`, `OLLAMA_BASE_URL`).\n\nIf a pass fails, the report falls back to rule-based text for that section.",
+        "height": 460,
+        "width": 1080,
+        "color": 4
+      },
+      "id": "27fbd3b8-81d9-5a39-95f3-288a9ae3dbb2",
+      "name": "Note: llm",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 5 · Publish & reply\nThe analytics service writes `report.json` + `report.pdf` to `site/reports/` and updates the index. The caller gets JSON with the report URL (the form workflow then redirects to it).",
+        "height": 640,
+        "width": 660,
+        "color": 3
+      },
+      "id": "449605eb-0127-588a-a66e-a4dc3e41fd0d",
+      "name": "Note: publish",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3520,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate-report",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "c7d55372-a2cb-52ee-bcc2-2a44b69a39d4",
+      "name": "Webhook: POST /generate-report",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "738ad395-a068-53ed-bec6-c8ecf90f468a"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Accepts the webhook body (or a raw item when run manually) and validates the ticker.\nconst j = $input.first().json;\nconst fromWebhook = j.body !== undefined && j.headers !== undefined;\nconst src = fromWebhook ? (j.body || {}) : j;\nconst rawTicker = String(src.ticker ?? src.Ticker ?? '').trim().toUpperCase();\nconst rawPeers = String(src.peers ?? src['Peers (optional)'] ?? '');\nconst valid = /^[A-Z0-9.\\-^=&]{1,20}$/;\nconst peers = rawPeers.split(/[\\s,;]+/).map(p => p.trim().toUpperCase()).filter(p => valid.test(p) && p !== rawTicker).slice(0, 8);\nreturn [{ json: {\n  ticker: rawTicker,\n  peers: peers.join(','),\n  valid: valid.test(rawTicker),\n  error: valid.test(rawTicker) ? null : `\"${rawTicker || '(empty)'}\" is not a valid ticker symbol.`,\n  source: ['site', 'form', 'api'].includes(src.source) ? src.source : 'api',\n  requested_at: new Date().toISOString(),\n  news_query: encodeURIComponent(rawTicker.replace(/\\.(NS|BO)$/, '') + ' stock'),\n  news_locale: /\\.(NS|BO)$/.test(rawTicker) ? 'hl=en-IN&gl=IN&ceid=IN:en' : 'hl=en-US&gl=US&ceid=US:en',\n} }];"
+      },
+      "id": "65d81d00-9dea-5e3a-86a4-93ac4f35fff2",
+      "name": "Normalize input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.RRG_ANALYTICS_URL }}/market/{{ encodeURIComponent($json.ticker) }}",
+        "options": {
+          "timeout": 180000
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "peers",
+              "value": "={{ $json.peers }}"
+            }
+          ]
+        }
+      },
+      "id": "893d2221-9acb-5ae2-967a-c86d0a2b24e9",
+      "name": "Yahoo Finance (yfinance)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        120
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.sec.gov/files/company_tickers.json",
+        "options": {
+          "timeout": 60000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "={{ $env.RRG_SEC_USER_AGENT }}"
+            },
+            {
+              "name": "Accept-Encoding",
+              "value": "gzip, deflate"
+            }
+          ]
+        }
+      },
+      "id": "a38ffe64-dd61-5ed0-a85b-057c9b862f61",
+      "name": "SEC: ticker → CIK map",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const ticker = $('Normalize input').first().json.ticker;\nconst map = $input.first().json || {};\nif (map.error) return [{ json: { cik: null, note: 'SEC ticker map unavailable' } }];\nconst wanted = [ticker, ticker.replace('.', '-')];\nfor (const k of Object.keys(map)) {\n  const r = map[k];\n  if (r && r.ticker && wanted.includes(String(r.ticker).toUpperCase())) {\n    return [{ json: { cik: String(r.cik_str).padStart(10, '0'), entity: r.title } }];\n  }\n}\nreturn [{ json: { cik: null, note: `${ticker} is not an SEC registrant (non-US listing or ADR under another symbol).` } }];"
+      },
+      "id": "6b5056d0-c769-5201-94e4-52e0abaca65a",
+      "name": "SEC: resolve CIK",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://data.sec.gov/submissions/CIK{{ $json.cik || '0000000000' }}.json",
+        "options": {
+          "timeout": 60000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "={{ $env.RRG_SEC_USER_AGENT }}"
+            },
+            {
+              "name": "Accept-Encoding",
+              "value": "gzip, deflate"
+            }
+          ]
+        }
+      },
+      "id": "074aeb73-1af0-5ce6-bec1-ce77d0c9f3a6",
+      "name": "SEC: company filings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1160,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const ref = $('SEC: resolve CIK').first().json;\nconst r = $input.first().json || {};\nconst ITEMS = { '1.01': 'Material agreement', '2.02': 'Results of operations', '2.05': 'Restructuring costs',\n  '5.02': 'Director/officer change', '5.07': 'Shareholder vote', '7.01': 'Reg FD disclosure', '8.01': 'Other events',\n  '9.01': 'Financial statements & exhibits', '2.01': 'Acquisition/disposition', '1.02': 'Agreement terminated' };\nif (!ref.cik || r.error || !r.filings || !r.filings.recent) {\n  return [{ json: { filings: { cik: ref.cik, entity: ref.entity || null, recent: [],\n    note: ref.note || 'SEC submissions request failed.' } } }];\n}\nconst f = r.filings.recent;\nconst skip = new Set(['3', '4', '5', '144', 'FWP', '424B2', '424B3', '424B5', 'SC 13G/A', 'S-8 POS']);\nconst cutoff = Date.now() - 90 * 864e5;\nlet insider90 = 0;\nconst recent = [];\nfor (let i = 0; i < f.form.length; i++) {\n  if (f.form[i] === '4' && Date.parse(f.filingDate[i]) >= cutoff) insider90++;\n  if (skip.has(f.form[i]) || recent.length >= 30) continue;\n  const acc = String(f.accessionNumber[i] || '').replace(/-/g, '');\n  const items = String(f.items?.[i] || '').split(',').map(s => s.trim()).filter(Boolean);\n  const desc = f.form[i] === '8-K' && items.length ? items.map(x => ITEMS[x] || `Item ${x}`).join('; ') : (f.primaryDocDescription?.[i] || '');\n  recent.push({ form: f.form[i], date: f.filingDate[i], report_date: f.reportDate?.[i] || null, description: desc,\n    url: acc && f.primaryDocument?.[i] ? `https://www.sec.gov/Archives/edgar/data/${parseInt(ref.cik, 10)}/${acc}/${f.primaryDocument[i]}` : null });\n}\nreturn [{ json: { filings: { cik: ref.cik, entity: r.name || ref.entity, sic: r.sicDescription || null,\n  fiscal_year_end: r.fiscalYearEnd || null, recent, insider_filings_90d: insider90 } } }];"
+      },
+      "id": "b05c9c1d-1d74-53c5-b142-c6846facdb12",
+      "name": "SEC: shape filings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1380,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://news.google.com/rss/search?q={{ $json.news_query }}&{{ $json.news_locale }}",
+        "options": {}
+      },
+      "id": "55ea5f01-f536-534d-9aa6-5b97ef072896",
+      "name": "News: Google News RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        720,
+        500
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "url": "=https://feeds.finance.yahoo.com/rss/2.0/headline?s={{ encodeURIComponent($json.ticker) }}&region=US&lang=en-US",
+        "options": {}
+      },
+      "id": "77549581-1a53-5d08-89cd-fec98c2118be",
+      "name": "News: Yahoo Finance RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        720,
+        680
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {},
+      "id": "dc74a5aa-abed-5bd8-8325-7f8f99efc4c5",
+      "name": "Merge headlines",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        940,
+        590
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const out = [];\nfor (const { json: j } of $input.all()) {\n  if (!j || !j.title || j.error) continue;\n  let host = '';\n  try { host = new URL(j.link).hostname; } catch (e) {}\n  const google = host.includes('news.google.');\n  // Google News titles end with \" - Publisher\"\n  const m = google ? String(j.title).match(/^(.*)\\s+-\\s+([^-]{2,60})$/) : null;\n  out.push({ title: m ? m[1] : j.title, link: j.link, published: j.isoDate || j.pubDate,\n    source: m ? m[2] : (j.creator || (google ? 'Google News' : 'Yahoo Finance')),\n    summary: google ? '' : (j.contentSnippet || ''), feed: google ? 'google-news' : 'yahoo-rss' });\n}\nreturn [{ json: { news: out.slice(0, 60) } }];"
+      },
+      "id": "92187547-5c85-563b-afa8-08205672da1d",
+      "name": "News: normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1160,
+        590
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9a07c2e7-08de-56df-964c-ad49f733ea74",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "78001262-5301-5391-9a71-4cc276e57530",
+      "name": "Valid ticker?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "id": "220cef63-00e4-5df0-a0d9-c5d60700c8cf",
+      "name": "Combine sources",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1620,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Normalize input').first().json;\nconst items = $input.all().map(i => i.json || {});\nconst pick = (k) => { const hit = items.find(j => j[k] !== undefined); return hit ? hit[k] : undefined; };\nconst market = pick('market');\nif (!market || !market.history || !market.history.length) {\n  const err = items.find(j => j.error)?.error;\n  let msg = typeof err === 'string' ? err : (err?.message || err?.description || '');\n  const detail = String(msg).match(/detail\\\\*\"\\s*:\\s*\\\\*\"(.*?)\\\\*\"/);\n  if (detail) msg = detail[1];\n  return [{ json: { ok: false, source: input.source, ticker: input.ticker,\n    error: `Could not load market data for ${input.ticker}. ${msg}`.trim() } }];\n}\nreturn [{ json: { ok: true, source: input.source, ticker: input.ticker,\n  request: { ticker: input.ticker, market, filings: pick('filings') || null, news: pick('news') || [] } } }];"
+      },
+      "id": "03af10e1-1f16-5440-b70e-f0ba1643c079",
+      "name": "Build analysis request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "95f7484c-a369-55a4-80c4-8b99fcbb3f67",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "811fb2e9-c0f2-508a-b586-b4ecf2335bc6",
+      "name": "Data OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2020,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.RRG_ANALYTICS_URL }}/analyze",
+        "options": {
+          "timeout": 120000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request) }}"
+      },
+      "id": "f1672f25-4f9a-55fb-932e-1e597270e6bf",
+      "name": "Compute analysis (Python)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const a = $input.first().json.analysis;\nconst SYSTEM = [\n  'You are a careful sell-side equity research analyst writing for a professional reader.',\n  'Use ONLY the facts and numbers in the brief. Never invent figures, dates, products, events or price targets.',\n  'Quote specific numbers from the brief where they support a point. Be concise, neutral and specific; no hype.',\n  'Do not give buy/sell/hold advice. Write in plain English. Return JSON that matches the schema exactly.',\n].join(' ');\nconst str = { type: 'string' };\nconst list = { type: 'array', items: { type: 'string' }, minItems: 2, maxItems: 5 };\nconst obj = (props) => ({ type: 'object', properties: props, required: Object.keys(props) });\nconst req = (schema, task, brief) => ({\n  stream: false, think: false, format: schema,\n  messages: [ { role: 'system', content: SYSTEM }, { role: 'user', content: `${task}\\n\\n=== BRIEF ===\\n${brief}` } ],\n});\nreturn [{ json: {\n  fundamental: req(obj({ business_overview: str, financial_performance: str, valuation: str, peer_positioning: str, filings_highlights: str }),\n    'Write the fundamentals section. business_overview: 2-3 sentences on what the company does. financial_performance: 3-4 sentences on growth, margins and cash flow trends across the annual figures. valuation: 2-3 sentences on multiples and FCF yield. peer_positioning: 2-3 sentences comparing multiples, margins and growth to the peers listed. filings_highlights: 1-2 sentences on the recent SEC filings (say so if none).',\n    a.llm_briefs.fundamentals),\n  technical: req(obj({ trend_and_momentum: str, key_levels: str, news_sentiment: str, risks: list, catalysts: list }),\n    'Write the technicals & news section. trend_and_momentum: 3-4 sentences interpreting the moving averages, RSI, MACD and returns. key_levels: 1-2 sentences on support/resistance and the 200-day average. news_sentiment: 2-3 sentences summarising what the headlines are about and their tone. risks: 3-5 short bullet sentences. catalysts: 2-4 short bullet sentences (upcoming or ongoing drivers mentioned in the brief or headlines).',\n    a.llm_briefs.technicals),\n  summary_brief: a.llm_briefs.summary,\n} }];"
+      },
+      "id": "c9d76e47-e539-51f1-adbe-094224415bcf",
+      "name": "Prepare LLM prompts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.RRG_OLLAMA_URL }}/api/chat",
+        "options": {
+          "timeout": 900000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(Object.assign({}, $json.fundamental, { model: $env.RRG_LLM_MODEL, options: { temperature: 0.2, num_ctx: Number($env.RRG_LLM_NUM_CTX || 8192) } })) }}"
+      },
+      "id": "665082f6-0a80-51a6-a0b5-4fc99728ddbd",
+      "name": "LLM: fundamentals analyst",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2680,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.RRG_OLLAMA_URL }}/api/chat",
+        "options": {
+          "timeout": 900000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(Object.assign({}, $('Prepare LLM prompts').first().json.technical, { model: $env.RRG_LLM_MODEL, options: { temperature: 0.2, num_ctx: Number($env.RRG_LLM_NUM_CTX || 8192) } })) }}"
+      },
+      "id": "6574d105-0f73-5a08-8126-e4c1c0ffc86c",
+      "name": "LLM: technicals & news analyst",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2880,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Prepare LLM prompts').first().json;\nconst content = (name) => {\n  const j = $(name).first().json || {};\n  return String(j.message?.content || '').replace(/<think>[\\s\\S]*?<\\/think>/g, '').slice(0, 6000);\n};\nconst str = { type: 'string' };\nconst list = { type: 'array', items: { type: 'string' }, minItems: 2, maxItems: 5 };\nconst schema = { type: 'object', required: ['headline', 'executive_summary', 'bull_case', 'bear_case', 'stance', 'confidence', 'watch_items'],\n  properties: { headline: str, executive_summary: str, bull_case: list, bear_case: list,\n    stance: { type: 'string', enum: ['Constructive', 'Neutral', 'Cautious'] },\n    confidence: { type: 'string', enum: ['Low', 'Medium', 'High'] }, watch_items: list } };\nconst task = 'You are the lead analyst. Using the brief and the two draft sections, write: headline (max 12 words, specific, no clickbait); ' +\n  'executive_summary (4-5 sentences covering business quality, valuation, trend and news); bull_case and bear_case (3-4 bullets each, each citing a number); ' +\n  'stance (Constructive, Neutral or Cautious — an overall research tone, not trading advice); confidence (Low, Medium or High, based on data completeness and agreement between signals); ' +\n  'watch_items (2-4 things to monitor).';\nconst brief = `${p.summary_brief}\\n=== DRAFT: FUNDAMENTALS ===\\n${content('LLM: fundamentals analyst')}\\n=== DRAFT: TECHNICALS & NEWS ===\\n${content('LLM: technicals & news analyst')}`;\nreturn [{ json: { summary: { stream: false, think: false, format: schema, messages: [\n  { role: 'system', content: p.fundamental.messages[0].content }, { role: 'user', content: `${task}\\n\\n=== BRIEF ===\\n${brief}` } ] } } }];"
+      },
+      "id": "8a2a99b9-5bcd-53c7-9d51-3851b6df7ec3",
+      "name": "Prepare summary prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.RRG_OLLAMA_URL }}/api/chat",
+        "options": {
+          "timeout": 900000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(Object.assign({}, $json.summary, { model: $env.RRG_LLM_MODEL, options: { temperature: 0.2, num_ctx: Number($env.RRG_LLM_NUM_CTX || 8192) } })) }}"
+      },
+      "id": "52107d2d-6ed5-5795-a86b-498d6a82fc5f",
+      "name": "LLM: lead analyst summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3280,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.RRG_ANALYTICS_URL }}/publish",
+        "options": {
+          "timeout": 180000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ analysis: $('Compute analysis (Python)').first().json.analysis, llm: { fundamental: $('LLM: fundamentals analyst').first().json, technical: $('LLM: technicals & news analyst').first().json, summary: $json }, meta: { model: $env.RRG_LLM_MODEL, execution_id: $execution.id, trigger: $('Normalize input').first().json.source } }) }}"
+      },
+      "id": "5b6617cf-b990-57bf-a9eb-5cbde31e2ac5",
+      "name": "Publish report (JSON + PDF)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nreturn [{ json: { ok: true, source: $('Normalize input').first().json.source, ticker: $('Normalize input').first().json.ticker,\n  id: r.id, report_url: r.report_url, pdf_url: r.pdf_url, stance: r.stance, headline: r.headline, llm_coverage: r.llm_coverage } }];"
+      },
+      "id": "7f113072-2883-568c-a915-c92f1315e7f6",
+      "name": "Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const j = $input.first().json;\nreturn [{ json: { ok: false, source: j.source, ticker: j.ticker, error: j.error } }];"
+      },
+      "id": "2d3b7bfc-cfe3-5dc0-9562-6389341bca48",
+      "name": "Error result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3800,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": "={{ $json.ok ? 200 : 422 }}"
+        }
+      },
+      "id": "ad4e6c24-1ca4-5da2-a633-cd6e53f1986b",
+      "name": "Respond to webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        4020,
+        420
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook: POST /generate-report": {
+      "main": [
+        [
+          {
+            "node": "Normalize input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SEC: ticker → CIK map": {
+      "main": [
+        [
+          {
+            "node": "SEC: resolve CIK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SEC: resolve CIK": {
+      "main": [
+        [
+          {
+            "node": "SEC: company filings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SEC: company filings": {
+      "main": [
+        [
+          {
+            "node": "SEC: shape filings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "News: Google News RSS": {
+      "main": [
+        [
+          {
+            "node": "Merge headlines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "News: Yahoo Finance RSS": {
+      "main": [
+        [
+          {
+            "node": "Merge headlines",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge headlines": {
+      "main": [
+        [
+          {
+            "node": "News: normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize input": {
+      "main": [
+        [
+          {
+            "node": "Valid ticker?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid ticker?": {
+      "main": [
+        [
+          {
+            "node": "Yahoo Finance (yfinance)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "SEC: ticker → CIK map",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "News: Google News RSS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "News: Yahoo Finance RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Yahoo Finance (yfinance)": {
+      "main": [
+        [
+          {
+            "node": "Combine sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SEC: shape filings": {
+      "main": [
+        [
+          {
+            "node": "Combine sources",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "News: normalize": {
+      "main": [
+        [
+          {
+            "node": "Combine sources",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Combine sources": {
+      "main": [
+        [
+          {
+            "node": "Build analysis request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build analysis request": {
+      "main": [
+        [
+          {
+            "node": "Data OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data OK?": {
+      "main": [
+        [
+          {
+            "node": "Compute analysis (Python)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute analysis (Python)": {
+      "main": [
+        [
+          {
+            "node": "Prepare LLM prompts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare LLM prompts": {
+      "main": [
+        [
+          {
+            "node": "LLM: fundamentals analyst",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM: fundamentals analyst": {
+      "main": [
+        [
+          {
+            "node": "LLM: technicals & news analyst",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM: technicals & news analyst": {
+      "main": [
+        [
+          {
+            "node": "Prepare summary prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare summary prompt": {
+      "main": [
+        [
+          {
+            "node": "LLM: lead analyst summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM: lead analyst summary": {
+      "main": [
+        [
+          {
+            "node": "Publish report (JSON + PDF)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish report (JSON + PDF)": {
+      "main": [
+        [
+          {
+            "node": "Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result": {
+      "main": [
+        [
+          {
+            "node": "Respond to webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error result": {
+      "main": [
+        [
+          {
+            "node": "Respond to webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

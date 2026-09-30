@@ -1,0 +1,129 @@
+{
+  "id": "rrgReportForm001",
+  "name": "Research Report · Request Form",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Report request form\nA friendly front door for the **Automated Research Report Generator** workflow.\n\nOpen **http://localhost:5679/form/research-report**, enter a ticker, and you are redirected to the finished report on the local site when it is ready (1–4 min with a local LLM).\n\nThis workflow just calls the generator's webhook, so the pipeline stays in one place.",
+        "height": 300,
+        "width": 460,
+        "color": 7
+      },
+      "id": "aecf1855-a7a9-5da7-aa6a-5f127831dcc4",
+      "name": "About",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "formTitle": "Automated Research Report",
+        "formDescription": "Enter a stock ticker (e.g. MSFT, NVDA, INFY.NS). Peers are optional and auto-detected when empty. Generation takes 1–4 minutes with a local LLM — keep this tab open.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Ticker",
+              "placeholder": "MSFT",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Peers (optional)",
+              "placeholder": "AAPL, GOOGL, AMZN"
+            }
+          ]
+        },
+        "options": {
+          "appendAttribution": false,
+          "buttonLabel": "Generate report",
+          "path": "research-report"
+        }
+      },
+      "id": "ab9a39c7-4101-5cfd-83a7-8faf7fb8264e",
+      "name": "Form: request a report",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        220
+      ],
+      "webhookId": "b45f74f3-7286-53b0-a2d7-4c48c195dc03"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://127.0.0.1:{{ $env.N8N_PORT || 5678 }}/webhook/generate-report",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ ticker: $json['Ticker'], peers: $json['Peers (optional)'] || '', source: 'form' }) }}",
+        "options": {
+          "timeout": 900000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "0fdf31d9-a301-5501-bba0-0b6212c9d6da",
+      "name": "Run report generator",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "respondWith": "redirect",
+        "redirectUrl": "={{ $json.ok ? $json.report_url : $env.RRG_SITE_URL + '/index.html?error=' + encodeURIComponent($json.error || 'Report generation failed') }}"
+      },
+      "id": "7e8dc2a5-749b-5c22-92e4-77a984b22f6d",
+      "name": "Open the report",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.3,
+      "position": [
+        480,
+        220
+      ],
+      "webhookId": "5e3b65bc-0f39-59c6-ab7f-f1f7ff5ca103"
+    }
+  ],
+  "connections": {
+    "Form: request a report": {
+      "main": [
+        [
+          {
+            "node": "Run report generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run report generator": {
+      "main": [
+        [
+          {
+            "node": "Open the report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

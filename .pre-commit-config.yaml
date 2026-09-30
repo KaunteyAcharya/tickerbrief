@@ -1,0 +1,33 @@
+# Install once:  pip install pre-commit && pre-commit install
+# Runs before every commit; blocks secrets and un-sanitized n8n exports.
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.28.0
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=2048"]
+      - id: detect-private-key
+      - id: check-json
+      - id: check-yaml
+      - id: end-of-file-fixer
+        exclude: ^site/assets/vendor/
+      - id: trailing-whitespace
+        exclude: ^site/assets/vendor/
+
+  - repo: local
+    hooks:
+      - id: forbid-env-files
+        name: Block .env files
+        entry: "Refusing to commit a .env file - put placeholders in .env.example instead."
+        language: fail
+        files: '(^|/)\.env($|\.(?!example$).*)'
+      - id: sanitize-n8n-workflows
+        name: Check n8n workflow exports are sanitized
+        entry: python scripts/sanitize_workflow.py --check
+        language: system
+        files: ^n8n/workflows/.*\.json$
