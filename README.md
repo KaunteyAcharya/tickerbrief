@@ -2,7 +2,7 @@
 
 **Automated equity research reports: n8n + Python analytics + a local LLM.**
 
-Uploading Automated Stock Research Report Generator Agent Demo.mp4…
+https://github.com/user-attachments/assets/df66e50d-bcfc-429f-b5f4-0b69b674ed1d
 
 Type a ticker, get a full equity research report: price and technicals, fundamentals, peer comparison, SEC filings, news sentiment and an LLM-written narrative, as an interactive web page and a PDF. It runs on your own machine using only free, open-source tools and key-less data sources.
 
