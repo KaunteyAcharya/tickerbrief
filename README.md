@@ -28,7 +28,7 @@ flowchart LR
 |---|---|---|
 | Orchestration | [n8n](https://n8n.io) (self-hosted, Docker) | Webhook + form trigger, parallel HTTP / RSS nodes, error-tolerant branches |
 | Market data | [yfinance](https://github.com/ranaroussi/yfinance) | Prices, statements, analyst targets, industry peers |
-| Filings | [SEC EDGAR API](https://www.sec.gov/search-filings/edgar-application-programming-interfaces) | No key; needs a contact User-Agent |
+| Filings | [SEC EDGAR API](https://www.sec.gov/search-filings/edgar-application-programming-interfaces) | No key; needs a contact email (`SEC_CONTACT`) |
 | News | Google News RSS, Yahoo Finance RSS | Deduplicated and scored with VADER plus a finance vocabulary |
 | Analytics | Python · FastAPI · pandas | Indicators written in plain pandas, heuristic scorecard |
 | LLM | [Ollama](https://ollama.com) (local) | JSON-schema structured output; any chat model (`qwen3:4b` by default) |
@@ -55,13 +55,13 @@ Copy-Item .env.example .env
 $b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b)
 $key = -join ($b | ForEach-Object { $_.ToString('x2') })
 (Get-Content .env) -replace 'replace-with-a-long-random-string', $key | Set-Content .env
-notepad .env   # put your email in SEC_USER_AGENT
+notepad .env   # put your email in SEC_CONTACT
 ```
 </details>
 
 In `.env` you need to set:
 - `N8N_ENCRYPTION_KEY`: any long random string. Generate one with `python -c "import secrets; print(secrets.token_hex(32))"`.
-- `SEC_USER_AGENT`: `"YourApp your-email@domain.com"`. SEC EDGAR rejects anonymous requests.
+- `SEC_CONTACT`: `"TickerBrief your-email@domain.com"`. SEC EDGAR asks automated tools for an app name and contact email and may reject anonymous requests. It is sent only to sec.gov, and a secondary address is fine.
 - `LLM_MODEL`: optional. Any model from `ollama list`.
 
 Then open:

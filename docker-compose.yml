@@ -1,7 +1,8 @@
-# Automated Research Report Generator — local stack
+# TickerBrief — local stack
 # All ports are bound to 127.0.0.1 so nothing is reachable from your network.
 # Secrets and personal values come from .env (never committed). See .env.example.
 
+# Compose project name kept as-is so existing containers and the n8n data volume keep working.
 name: research-report-generator
 
 x-n8n-env: &n8n-env
@@ -27,7 +28,7 @@ x-n8n-env: &n8n-env
   RRG_OLLAMA_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
   RRG_LLM_MODEL: ${LLM_MODEL:-qwen3:4b}
   RRG_LLM_NUM_CTX: ${LLM_NUM_CTX:-8192}
-  RRG_SEC_USER_AGENT: ${SEC_USER_AGENT:?Set SEC_USER_AGENT in .env (SEC requires a contact email)}
+  RRG_SEC_CONTACT: ${SEC_CONTACT:?Set SEC_CONTACT in .env (SEC requires a contact email)}
   RRG_SITE_URL: http://localhost:${SITE_PORT:-8088}
 
 services:

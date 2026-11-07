@@ -1,6 +1,6 @@
 {
   "id": "rrgResearchRpt01",
-  "name": "Automated Research Report Generator",
+  "name": "TickerBrief · Report Pipeline",
   "nodes": [
     {
       "parameters": {
@@ -20,7 +20,7 @@
     },
     {
       "parameters": {
-        "content": "## 2 · Parallel data pulls (all free, no API keys)\n- **yfinance** via the local analytics service: prices, fundamentals, statements, peers\n- **SEC EDGAR**: ticker → CIK → recent filings (needs a contact User-Agent, set in `.env`)\n- **RSS**: Google News + Yahoo Finance headlines\n\nEvery branch continues on error, so one failing source never blocks the report.",
+        "content": "## 2 · Parallel data pulls (all free, no API keys)\n- **yfinance** via the local analytics service: prices, fundamentals, statements, peers\n- **SEC EDGAR**: ticker → CIK → recent filings (needs an app name + contact email, `SEC_CONTACT` in `.env`)\n- **RSS**: Google News + Yahoo Finance headlines\n\nEvery branch continues on error, so one failing source never blocks the report.",
         "height": 880,
         "width": 900,
         "color": 5
@@ -152,7 +152,7 @@
           "parameters": [
             {
               "name": "User-Agent",
-              "value": "={{ $env.RRG_SEC_USER_AGENT }}"
+              "value": "={{ $env.RRG_SEC_CONTACT }}"
             },
             {
               "name": "Accept-Encoding",
@@ -197,7 +197,7 @@
           "parameters": [
             {
               "name": "User-Agent",
-              "value": "={{ $env.RRG_SEC_USER_AGENT }}"
+              "value": "={{ $env.RRG_SEC_CONTACT }}"
             },
             {
               "name": "Accept-Encoding",

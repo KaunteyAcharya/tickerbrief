@@ -43,7 +43,7 @@
   function render(app, R, base) {
     const a = R.analysis, n = R.narrative, m = a.meta, pr = a.price, f = a.fundamentals, t = a.technicals;
     const cur = m.currency || "";
-    document.title = `${m.ticker} · ${m.name} — Research Report`;
+    document.title = `${m.ticker} · ${m.name} — TickerBrief`;
     if (R.pdf) { const b = $("#pdf-btn"); b.style.display = ""; b.setAttribute("href", `${base}/${R.id}/report.pdf`); }
 
     const up = RR.isNum(pr.change_1d_pct) && pr.change_1d_pct >= 0;
